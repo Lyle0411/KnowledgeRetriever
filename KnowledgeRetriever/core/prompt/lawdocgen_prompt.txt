@@ -1,0 +1,20 @@
+请你结合以下搜索数据，填充检查问题的检查结果：
+检查问题：
+{problem}
+
+搜索数据：
+{data}
+
+不需要其他信息，参考输出格式：
+```json
+{{
+    "oneLevel": "xxx",
+    "twoLevel": "xxx",
+    "threeLevel": "xxx",
+    "project": "xxx",
+    "inspectContent": "xxx",
+    "inspectMainDataMethod": "xxx",
+    "inspectBasis": "xxx",
+    "punishment": "xxx"
+}}
+```
