@@ -31,4 +31,4 @@ class TemplateIn1(_BaseModel):
 class TemplateIn2(BaseModel):
     text: Optional[str] = Field(description="输入文本")
 
-      
+

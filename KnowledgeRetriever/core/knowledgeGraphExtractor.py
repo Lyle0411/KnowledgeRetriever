@@ -3,7 +3,7 @@ import sys
 import json
 import re
 
-from KG import KG
+from .KG import KG
 import os
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
@@ -326,7 +326,7 @@ class KnowledgeGraphExtractor:
             print(f"处理文件出错: {str(e)}")
             raise
 
-    def procss_case_data(self, data):
+    def process_case_data(self, data):
         """数据项第一列为案例描述, 第二列为条例列表"""
         with open("prompt/kw_extraction.txt", "r", encoding="utf-8") as file: self.getKw_prompt = file.read()
 

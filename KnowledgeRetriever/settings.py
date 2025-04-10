@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     )
 
     host: str = Field(
-        default="0.0.0.0", description=f"Host where to listen for connections."
+        default="127.0.0.1", description=f"Host where to listen for connections."
     )
 
     http_port: int = Field(
@@ -190,9 +190,9 @@ class Settings(BaseSettings):
     APP_HOST: str = Field(default="0.0.0.0")
     APP_PORT: str = Field(default="6006")
 
-    NEO4J_BOLT: str = Field(default="bolt://localhost:7687/")
+    NEO4J_BOLT: str = Field(default="bolt://localhost:7687")
     NEO4J_USERNAME: str = Field(default="neo4j")
-    NEO4J_PASSWORD: str = Field(default="pleaseletmein")
+    NEO4J_PASSWORD: str = Field(default="12341234")
 
     REDIS_HOST: str = Field(default="localhost")
 

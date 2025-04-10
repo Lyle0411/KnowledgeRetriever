@@ -44,6 +44,7 @@ class RESTServer:
             {
                 "host": self._settings.host,
                 "port": self._settings.http_port,
+                "reload": True
                 # "root_path": self._settings.root_path,
             }
         )
