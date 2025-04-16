@@ -37,7 +37,7 @@ class Endpoints(object):
                 Path(__file__).parent.parent
                 / "core"
                 / "data"
-        )
+        )  # C:\PythonProjects\KnowledgeRetriever\KnowledgeRetriever\core\data  绝对路径
 
         # 确保目录存在（mkdir 代替 os.makedirs）
         save_dir.mkdir(parents=True, exist_ok=True)  # parents=True 会自动创建中间目录

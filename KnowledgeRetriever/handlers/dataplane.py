@@ -33,7 +33,7 @@ class DataPlane(object):
 
     async def create_graph(self, subject, title, topic, save_path: str):
         kg = KnowledgeGraphExtractor(
-            Subject=subject,
+            subject=subject,
             title=title,
             topic=topic
         )
