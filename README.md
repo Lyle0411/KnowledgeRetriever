@@ -14,7 +14,7 @@ poetry install
 
 # Start Spec:
 ```bash
-cp .env_example .env
+cp .env .env
 
 # 修改.env文件中的配置
 vim .env

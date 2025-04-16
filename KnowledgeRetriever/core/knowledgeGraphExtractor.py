@@ -2,8 +2,8 @@
 import sys
 import json
 import re
-
-from KG import KG
+from pathlib import Path
+from .KG import KG
 import os
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
@@ -15,51 +15,60 @@ llm = ChatOpenAI(model=os.getenv('DEFAULT_LARGE_MODEL'), temperature=0.0)
 chain = (PromptTemplate(template="""{query}""",
                         input_variables=["query"])
          | llm)
-embeddings = OpenAIEmbeddings(model = os.getenv('DEFAULT_EMBEDDING_MODEL'),
+embeddings = OpenAIEmbeddings(model=os.getenv('DEFAULT_EMBEDDING_MODEL'),
                               disallowed_special=())
-def qa(query:str) -> str:
+
+
+def qa(query: str) -> str:
     return chain.invoke({'query': query}).content
 
 class KnowledgeGraphExtractor:
-    def __init__(self, Subject = "Qualitative", title = "WGSL", topic = "案件"):
+    def __init__(self, subject="Qualitative", title="WGSL", topic="案件"):
         # 初始化知识图谱
         self.kg = KG()
         self.title = title
 
         # 目标主体type命名
-        self.Subject = Subject
-        self.SubjectKw = f"{self.Subject}_kw"
+        self.subject = subject
+        self.subject_kw = f"{self.subject}_kw"
         self.topic = topic
-
+        self.base_dir = Path(__file__).resolve().parent   # 基准路径
         # 读取提示词模板
-        self.entity_prompt = self.read_prompt("prompt/entity_extraction.txt")
-        self.relation_prompt = self.read_prompt("prompt/relationship_extraction.txt")
+        self.entity_prompt = self.read_prompt("entity_extraction.txt")
+        self.relation_prompt = self.read_prompt("relationship_extraction.txt")
 
-        # 已处理文件记录
-        self.progress_file = f"data/{Subject}_processed_files.txt"
+
+        self.progress_file = self.base_dir / "data" / f"{subject}_processed_files.txt"
+
         self.processed_files = self.load_progress()
 
     def load_progress(self):
         """加载已处理的文件列表"""
-        if os.path.exists(self.progress_file):
+        if self.progress_file.exists():
             with open(self.progress_file, "r", encoding="utf-8") as f:
                 return set(line.strip() for line in f)
         return set()
 
     def save_progress(self, item_id):
         """记录已处理的文件"""
+
         os.makedirs(os.path.dirname(self.progress_file), exist_ok=True)
         with open(self.progress_file, "a", encoding="utf-8") as f:
             f.write(f"{item_id}\n")
 
     @staticmethod
-    def read_prompt(file_path):
+    def read_prompt(file_name):
+
+        prompt_dir = Path(__file__).resolve().parent / "prompt"
+
         """读取提示词模板"""
-        with open(file_path, "r", encoding="utf-8") as file:
+        with open(prompt_dir / file_name, "r", encoding="utf-8") as file:
             return file.read()
 
     @staticmethod
     def read_json_file(file_path):
+
+        file_path = Path(file_path).resolve()
         """读取JSON文件"""
         with open(file_path, "r", encoding="utf-8") as file:
             return json.load(file)
@@ -110,7 +119,7 @@ class KnowledgeGraphExtractor:
             print(f"正在处理数据 {item_id}: {title}")
             print(f"该数据包含 {len(clusters)} 个线索簇")
 
-            self.kg.create_node(self.Subject, {"name": title,
+            self.kg.create_node(self.subject, {"name": title,
                                                "content": '\n'.join([item["comments"] for item in clusters])})
 
             entity_contents = {}
@@ -156,15 +165,15 @@ class KnowledgeGraphExtractor:
             )
 
             for entity, content_units in entity_contents.items():
-                self.kg.create_node(self.SubjectKw, {"name": entity,
-                                                   "trails":str(content_units)})
-                self.kg.create_relationship(self.SubjectKw, {"name": entity},
-                                            self.Subject, {"name": title},
+                self.kg.create_node(self.subject_kw, {"name": entity,
+                                                   "trails": str(content_units)})
+                self.kg.create_relationship(self.subject_kw, {"name": entity},
+                                            self.subject, {"name": title},
                                             "相关场景")
 
             for relation in all_relations:
-                self.kg.create_relationship(self.SubjectKw, {"name": relation['source']},
-                                            self.SubjectKw, {"name": relation['target']},
+                self.kg.create_relationship(self.subject_kw, {"name": relation['source']},
+                                            self.subject_kw, {"name": relation['target']},
                                             relation['relation'])
             return True
 
@@ -178,7 +187,7 @@ class KnowledgeGraphExtractor:
 
         # 获取所有实体对的相似度
         entity_pairs = []
-        entities = [item['n']['name'] for item in self.kg.neo4j(f"""MATCH (n:`{self.SubjectKw}`) RETURN n""")]
+        entities = [item['n']['name'] for item in self.kg.neo4j(f"""MATCH (n:`{self.subject_kw}`) RETURN n""")]
 
         for i, entity1 in enumerate(entities):
             embedding1 = embeddings.embed_query(entity1)
@@ -203,7 +212,8 @@ class KnowledgeGraphExtractor:
     def _llm_merge_judgment(self, entity1: str, entity2: str) -> bool:
         """使用LLM判断两个实体是否应该合并"""
         try:
-            with open("prompt/entity_merge.txt", "r", encoding="utf-8") as file:
+            prompt_path = self.base_dir / "prompt" / "entity_merge.txt"
+            with open(prompt_path, "r", encoding="utf-8") as file:
                 template = file.read()
 
             prompt = template.format(entity1=entity1, entity2=entity2)
@@ -233,7 +243,7 @@ class KnowledgeGraphExtractor:
 
         # 合并内容
         merged_attrs = {'name': merged_entity,
-                        'trails': eval(self.kg.neo4j(f"""MATCH (n:`{self.SubjectKw}`) WHERE n.name = "{merged_entity}" RETURN n""")[0]['n']['trails'])}
+                        'trails': eval(self.kg.neo4j(f"""MATCH (n:`{self.subject_kw}`) WHERE n.name = "{merged_entity}" RETURN n""")[0]['n']['trails'])}
         self._merge_entity_content(main_entity, merged_attrs)
 
 
@@ -243,7 +253,7 @@ class KnowledgeGraphExtractor:
 
         # 删除被合并的实体
         merged_attrs['trails'] = str(merged_attrs['trails'])
-        self.kg.delete_node(self.SubjectKw, merged_attrs)
+        self.kg.delete_node(self.subject_kw, merged_attrs)
 
 
         return main_entity
@@ -251,7 +261,7 @@ class KnowledgeGraphExtractor:
     def _merge_entity_content(self, main_id: str, attrs: dict) -> None:
         """合并实体内容"""
         existing_attrs = {'name': main_id,
-                          'trails': eval(self.kg.neo4j(f"""MATCH (n:`{self.SubjectKw}`) WHERE n.name = "{main_id}" RETURN n""")[0]['n']['trails'])}
+                          'trails': eval(self.kg.neo4j(f"""MATCH (n:`{self.subject_kw}`) WHERE n.name = "{main_id}" RETURN n""")[0]['n']['trails'])}
 
         # 使用集合去重
         existing_set = {
@@ -261,38 +271,43 @@ class KnowledgeGraphExtractor:
         merged_set = existing_set.union(new_set)
         existing_attrs['trails'] = str(merged_set)
 
-        old_attrs = dict(self.kg.neo4j(f"MATCH (n:`{self.SubjectKw}`) WHERE n.name = '{main_id}' RETURN n")[0]['n'])
+        old_attrs = dict(self.kg.neo4j(f"MATCH (n:`{self.subject_kw}`) WHERE n.name = '{main_id}' RETURN n")[0]['n'])
 
         # 保存合并后的内容
-        self.kg.update_node_attrs(self.SubjectKw, old_attrs, existing_attrs)
+        self.kg.update_node_attrs(self.subject_kw, old_attrs, existing_attrs)
 
     def _merge_entity_relationships(self, main_id: str, merged_id: str) -> None:
         """合并实体的关系"""
         # 处理入边
-        for predecessor in [item['t']['name'] for item in self.kg.neo4j(f"""MATCH (s:`{self.SubjectKw}`)<-[r]-(t) WHERE s.name = '{merged_id}' RETURN t""")]:
+        for predecessor in [item['t']['name'] for item in self.kg.neo4j(f"""MATCH (s:`{self.subject_kw}`)<-[r]-(t) WHERE s.name = '{merged_id}' RETURN t""")]:
             if predecessor != main_id:  # 避免自环
-                edges_data = [str(type(item['r']))[20:-2] for item in self.kg.neo4j(f"""MATCH (s:`{self.SubjectKw}`)<-[r]-(t) WHERE s.name = '{merged_id}' AND t.name = '{predecessor}' RETURN r""")]
+                edges_data = [str(type(item['r']))[20:-2] for item in self.kg.neo4j(f"""MATCH (s:`{self.subject_kw}`)<-[r]-(t) WHERE s.name = '{merged_id}' AND t.name = '{predecessor}' RETURN r""")]
                 for edge_data in edges_data:
                     # 避免添加自环
                     if predecessor != main_id:
                         predecessor_label = str(self.kg.neo4j(f"""MATCH (n) WHERE n.name = "{predecessor}" RETURN n""")[0]['n'].labels)[1:]
                         self.kg.create_relationship(predecessor_label, dict(self.kg.neo4j(f"MATCH (n:`{predecessor_label}`) WHERE n.name = '{predecessor}' RETURN n")[0]['n']),
-                                                    self.SubjectKw, dict(self.kg.neo4j(f"MATCH (n:`{self.SubjectKw}`) WHERE n.name = '{main_id}' RETURN n")[0]['n']),
+                                                    self.subject_kw, dict(self.kg.neo4j(f"MATCH (n:`{self.subject_kw}`) WHERE n.name = '{main_id}' RETURN n")[0]['n']),
                                                     edge_data)
 
         # 处理出边
-        for successor in [item['t']['name'] for item in self.kg.neo4j(f"""MATCH (s:`{self.SubjectKw}`)-[r]->(t) WHERE s.name = '{merged_id}' RETURN t""")]:
+        for successor in [item['t']['name'] for item in self.kg.neo4j(f"""MATCH (s:`{self.subject_kw}`)-[r]->(t) WHERE s.name = '{merged_id}' RETURN t""")]:
             if successor != main_id:  # 避免自环
-                edges_data = [str(type(item['r']))[20:-2] for item in self.kg.neo4j(f"""MATCH (s:`{self.SubjectKw}`)-[r]->(t) WHERE s.name = '{merged_id}' AND t.name = '{successor}' RETURN r""")]
+                edges_data = [str(type(item['r']))[20:-2] for item in self.kg.neo4j(f"""MATCH (s:`{self.subject_kw}`)-[r]->(t) WHERE s.name = '{merged_id}' AND t.name = '{successor}' RETURN r""")]
                 for edge_data in edges_data:
                     # 避免添加自环
                     if successor != main_id:
                         successor_label = str(self.kg.neo4j(f"""MATCH (n) WHERE n.name = "{successor}" RETURN n""")[0]['n'].labels)[1:]
-                        self.kg.create_relationship(self.SubjectKw, dict(self.kg.neo4j(f"MATCH (n:`{self.SubjectKw}`) WHERE n.name = '{main_id}' RETURN n")[0]['n']),
+                        self.kg.create_relationship(self.subject_kw, dict(self.kg.neo4j(f"MATCH (n:`{self.subject_kw}`) WHERE n.name = '{main_id}' RETURN n")[0]['n']),
                                                     successor_label, dict(self.kg.neo4j(f"MATCH (n:`{successor_label}`) WHERE n.name = '{successor}' RETURN n")[0]['n']),
                                                     edge_data)
 
-    def process_data(self, input_file="data/results.json"):
+    def process_data(self, input_file=None):
+
+        if input_file is None:
+            input_file = Path(__file__).resolve().parent / "data" / "results.json"
+        else:
+            input_file = Path(input_file).resolve(strict=False)
         """处理数据文件"""
         try:
             data = self.read_json_file(input_file)
@@ -326,9 +341,11 @@ class KnowledgeGraphExtractor:
             print(f"处理文件出错: {str(e)}")
             raise
 
-    def procss_case_data(self, data):
+    def process_case_data(self, data):
         """数据项第一列为案例描述, 第二列为条例列表"""
-        with open("prompt/kw_extraction.txt", "r", encoding="utf-8") as file: self.getKw_prompt = file.read()
+        prompt_path = self.base_dir / "prompt" / "kw_extraction.txt"
+        with open(prompt_path, "r", encoding="utf-8") as file:
+            self.getKw_prompt = file.read()
 
         for item in data:
             case = item[0]
@@ -337,25 +354,26 @@ class KnowledgeGraphExtractor:
             kws = self.parse_ai_response(response)["keywords"]
             for kw in kws:
                 for title in item[1]:
-                    self.kg.create_node(self.SubjectKw, {"name": kw})
-                    self.kg.create_relationship(self.SubjectKw, {"name": kw},
-                                            self.Subject, {"name": title},
+                    self.kg.create_node(self.subject_kw, {"name": kw})
+                    self.kg.create_relationship(self.subject_kw, {"name": kw},
+                                            self.subject, {"name": title},
                                             "相关场景")
 
-def main(input_file="data/results.json", Subject="Qualitative", title  = "WGSL"):
-    try:
-        print("\n开始处理数据")
-        extractor = KnowledgeGraphExtractor(Subject, title)
-        extractor.process_data(input_file)
-
-    except Exception as e:
-        print(f"程序执行出错: {str(e)}")
-        sys.exit(1)
+# def main(input_file="data/results.json", subject="Qualitative", title  = "WGSL"):
+#     try:
+#         print("\n开始处理数据")
+#         extractor = KnowledgeGraphExtractor(subject, title)
+#         extractor.process_data(input_file)
+#
+#     except Exception as e:
+#         print(f"程序执行出错: {str(e)}")
+#         sys.exit(1)
 
 
 if __name__ == "__main__":
     # kg = KG()
     # kg.clear()
 
-    extractor = KnowledgeGraphExtractor(Subject = "Standard", title = "GZPD", topic = "煤矿生产监管检查")
+    extractor = KnowledgeGraphExtractor(subject="Standard", title="GZPD", topic="煤矿生产监管检查")
+    print(extractor.base_dir)
     extractor.process_data()

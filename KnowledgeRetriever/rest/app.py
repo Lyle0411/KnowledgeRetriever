@@ -40,6 +40,7 @@ class APIRoute(FastAPIRoute):
 
         return custom_route_handler
 
+
 def create_app(
     data_plane: DataPlane,
 ) -> FastAPI:
@@ -51,6 +52,11 @@ def create_app(
             endpoints.knowledgeRetriever,
             methods=["POST"]
         ),
+        APIRoute(
+            "/v1/create_graph",
+            endpoints.graphCreate,
+            methods=["POST"]
+        )
     ]
     
     app = FastAPI(
@@ -61,3 +67,5 @@ def create_app(
     # app.router.route_class = APIRoute
     
     return app
+
+
